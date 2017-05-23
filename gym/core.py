@@ -77,7 +77,7 @@ class Env(object):
 
     # Override in ALL subclasses
     def _step(self, action): raise NotImplementedError
-    def _reset(self): raise NotImplementedError
+    def _reset(self, **kwargs): raise NotImplementedError
     def _render(self, mode='human', close=False):
         if close:
             return
@@ -110,7 +110,7 @@ class Env(object):
         observation, reward, done, info = self._step(action)
         return observation, reward, done, info
 
-    def reset(self):
+    def reset(self, **kwargs):
         """Resets the state of the environment and returns an initial
         observation. Will call 'configure()' if not already called.
 
@@ -120,7 +120,7 @@ class Env(object):
         if self.metadata.get('configure.required') and not self._configured:
             logger.warning("Called reset on %s before configuring. Configuring automatically with default arguments", self)
             self.configure()
-        observation = self._reset()
+        observation = self._reset(**kwargs)
         return observation
 
     def render(self, mode='human', close=False):
@@ -332,8 +332,8 @@ class Wrapper(Env):
     def _step(self, action):
         return self.env.step(action)
 
-    def _reset(self):
-        return self.env.reset()
+    def _reset(self, **kwargs):
+        return self.env.reset(**kwargs)
 
     def _render(self, mode='human', close=False):
         if self.env is None:
@@ -371,8 +371,8 @@ class Wrapper(Env):
         self._spec = spec
 
 class ObservationWrapper(Wrapper):
-    def _reset(self):
-        observation = self.env.reset()
+    def _reset(self, **kwargs):
+        observation = self.env.reset(**kwargs)
         return self._observation(observation)
 
     def _step(self, action):

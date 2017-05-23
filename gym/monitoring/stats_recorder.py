@@ -64,8 +64,8 @@ class StatsRecorder(object):
     def before_reset(self):
         assert not self.closed
 
-        if self.done is not None and not self.done and self.steps > 0:
-            raise error.Error("Tried to reset environment which is not done. While the monitor is active for {}, you cannot call reset() unless the episode is over.".format(self.env_id))
+        #if self.done is not None and not self.done and self.steps > 0:
+        #    raise error.Error("Tried to reset environment which is not done. While the monitor is active for {}, you cannot call reset() unless the episode is over.".format(self.env_id))
 
         self.done = False
         if self.initial_reset_timestamp is None:

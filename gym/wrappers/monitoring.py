@@ -35,9 +35,9 @@ class _Monitor(Wrapper):
 
         return observation, reward, done, info
 
-    def _reset(self):
+    def _reset(self, **kwargs):
         self._before_reset()
-        observation = self.env.reset()
+        observation = self.env.reset(**kwargs)
         self._after_reset(observation)
 
         return observation
@@ -239,7 +239,7 @@ class _Monitor(Wrapper):
         self.close()
 
     def get_total_steps(self):
-        return self.stats_recorder.total_steps        
+        return self.stats_recorder.total_steps
 
     def get_episode_rewards(self):
         return self.stats_recorder.episode_rewards
