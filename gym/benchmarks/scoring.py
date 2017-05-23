@@ -44,8 +44,9 @@ def benchmark_aggregate_score(benchmark, env_id_to_benchmark_results):
                 elapsed_times.extend(benchmark_result['elapsed_times'])
             else:
                 # no matching benchmark result for this trial
+                # TODOJT bug?
                 env_scores = scores.setdefault(env_id, [])
-                env_scores.append([benchmark.scorer.null_score() for _ in task_list])
+                env_scores.append([benchmark.scorer.null_score for _ in task_list])
                 solves[env_id] = False
 
     score = benchmark.score_benchmark(scores)
@@ -80,6 +81,7 @@ class ClipTo01ThenAverage(object):
     def __init__(self, num_episodes=100):
         self.num_episodes = num_episodes
 
+    @property
     def null_score(self):
         """
         This is used to compute benchmark scores when we are missing an evaluation
@@ -149,6 +151,7 @@ class ClipTo01ThenAverage(object):
         scores = []
         solves = []
         rewards = []
+        lengths = []
         _timestamps = []
         elapsed_times = []
         for task in tasks:
@@ -179,6 +182,8 @@ class ClipTo01ThenAverage(object):
             # This probably won't work long-term but is fine for now.
             allowed_episode_rewards = np.array(episode_rewards)[allowed_e_idx]
             reward = allowed_episode_rewards[-self.num_episodes:]
+            allowed_episode_lengths = np.array(episode_lengths)[allowed_e_idx]
+            length = allowed_episode_lengths[-self.num_episodes:]
 
             floor = task.reward_floor
             ceiling = task.reward_ceiling
@@ -187,6 +192,7 @@ class ClipTo01ThenAverage(object):
                 extra = self.num_episodes-len(reward)
                 logger.info('Only %s rewards for %s; adding %s', len(reward), env_id, extra)
                 reward = np.concatenate([reward, [floor] * extra])
+                length = np.concatenate([length, [0] * extra])
 
             # Grab the indexes where we reached the ceiling
             solved = reward >= ceiling
@@ -200,6 +206,8 @@ class ClipTo01ThenAverage(object):
             solves.append(solved)
             # Record the list of rewards
             rewards.append(reward)
+            # Record the list of lengths
+            lengths.append(length)
 
             if len(allowed_e_idx) > 0:
                 if not np.isfinite(cutoff_idx):
@@ -221,6 +229,7 @@ class ClipTo01ThenAverage(object):
 
         return {
             'rewards': rewards,
+            'lengths': lengths,
             'scores': scores,
             'solves': solves,
             'timestamps': _timestamps,
@@ -294,6 +303,7 @@ class BenchmarkScoringRule(object):
     def __init__(self, score_and_solved_func):
         self.score_and_solved_func = score_and_solved_func
 
+    @property
     def null_score(self):
         return 0.0
 
@@ -334,6 +344,8 @@ class BenchmarkScoringRule(object):
         solves = []
         # List of lists of episode rewards for each task
         rewards = []
+        # List of lists of relevant episode lengths for each task
+        cutoff_lengths = []
         _timestamps = []
         elapsed_times = []
         for task in tasks:
@@ -351,6 +363,7 @@ class BenchmarkScoringRule(object):
             scores.append(score)
             solves.append(solved)
             rewards.append(reward)
+            cutoff_lengths.append(lengths[:cutoff_idx])
 
             if np.any(timestamps[:cutoff_idx]):
                 last_timestamp = timestamps[cutoff_idx - 1]
@@ -367,6 +380,7 @@ class BenchmarkScoringRule(object):
 
         return {
             'rewards': rewards,
+            'lengths': cutoff_lengths,
             'scores': scores,
             'solves': solves,
             'timestamps': _timestamps,
@@ -381,32 +395,38 @@ class BenchmarkScoringRule(object):
 
         return np.mean(all_scores)
 
-def TotalReward():
-    def total_reward_from_episode_rewards(task, reward, elapsed_seconds):
-        "TotalReward scoring takes the mean of all rewards earned over the course of the episode and clips it between reward_floor and reward_ceiling"
-        # reward is an array containing valid rewards for the episode
-        floor = task.reward_floor
-        ceiling = task.reward_ceiling
 
-        solved = reward >= ceiling
-        # Sum raw rewards, linearly rescale to between 0 and 1
-        score = np.clip((np.mean(reward) - floor) / (ceiling - floor), 0, 1)
-        return score, solved
+def total_reward_from_episode_rewards(task, reward, elapsed_seconds):
+    "TotalReward scoring takes the mean of all rewards earned over the course of the episode and clips it between reward_floor and reward_ceiling"
+    # reward is an array containing valid rewards for the episode
+    floor = task.reward_floor
+    ceiling = task.reward_ceiling
 
-    return BenchmarkScoringRule(total_reward_from_episode_rewards)
+    solved = reward >= ceiling
+    # Sum raw rewards, linearly rescale to between 0 and 1
+    score = np.clip((np.mean(reward) - floor) / (ceiling - floor), 0, 1)
+    return score, solved
 
-def RewardPerTime():
-    def reward_per_time_from_episode_rewards(task, reward, elapsed_seconds):
-        "RewardPerTime scoring takes the total reward earned over the course of the episode, divides by the elapsed time, and clips it between reward_floor and reward_ceiling"
-        floor = task.reward_floor
-        ceiling = task.reward_ceiling
 
-        # TODO actually compute solves for this
-        solved = np.zeros(len(reward))
+class TotalReward(BenchmarkScoringRule):
+    def __init__(self):
+        super(TotalReward, self).__init__(total_reward_from_episode_rewards)
 
-        # Sum the rewards for all episodes, divide by total time taken for all episodes
-        reward_per_second = np.sum(reward) / elapsed_seconds[-1] if np.any(elapsed_seconds) else 0.0
-        score = np.clip((reward_per_second - floor) / (ceiling - floor), 0, 1)
-        return score, solved
 
-    return BenchmarkScoringRule(reward_per_time_from_episode_rewards)
+def reward_per_time_from_episode_rewards(task, reward, elapsed_seconds):
+    "RewardPerTime scoring takes the total reward earned over the course of the episode, divides by the elapsed time, and clips it between reward_floor and reward_ceiling"
+    floor = task.reward_floor
+    ceiling = task.reward_ceiling
+
+    # TODO actually compute solves for this
+    solved = np.zeros(len(reward))
+
+    # Sum the rewards for all episodes, divide by total time taken for all episodes
+    reward_per_second = np.sum(reward) / elapsed_seconds[-1] if np.any(elapsed_seconds) else 0.0
+    score = np.clip((reward_per_second - floor) / (ceiling - floor), 0, 1)
+    return score, solved
+
+
+class RewardPerTime(BenchmarkScoringRule):
+    def __init__(self):
+        super(RewardPerTime, self).__init__(reward_per_time_from_episode_rewards)
