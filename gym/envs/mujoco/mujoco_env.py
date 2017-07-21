@@ -76,11 +76,11 @@ class MujocoEnv(gym.Env):
     # -----------------------------
 
     def _reset(self):
-        mjlib.mj_resetData(self.model.ptr, self.data.ptr)
+        #mjlib.mj_resetData(self.model.ptr, self.data.ptr)
         ob = self.reset_model()
-        if self.viewer is not None:
-            self.viewer.autoscale()
-            self.viewer_setup()
+        #if self.viewer is not None:
+        #    self.viewer.autoscale()
+        #    self.viewer_setup()
         return ob
 
     def set_state(self, qpos, qvel):
