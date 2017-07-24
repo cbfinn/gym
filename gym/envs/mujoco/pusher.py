@@ -104,6 +104,7 @@ class PusherEnv(mujoco_env.MujocoEnv, utils.EzPickle):
             self.model.data.qpos.flat[:7],
             self.model.data.qvel.flat[:7],
             self.get_body_com("tips_arm"),
+            self.get_body_com("distractor"),
             self.get_body_com("object"),
             self.get_body_com("goal"),
         ])
