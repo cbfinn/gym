@@ -218,6 +218,13 @@ register(
 )
 
 register(
+    id='Object-v0',
+    entry_point='gym.envs.mujoco:ObjectEnv',
+    max_episode_steps=100,
+    reward_threshold=0.0,
+)
+
+register(
     id='Thrower-v0',
     entry_point='gym.envs.mujoco:ThrowerEnv',
     max_episode_steps=100,
